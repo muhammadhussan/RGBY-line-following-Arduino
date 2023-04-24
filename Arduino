@@ -1,0 +1,158 @@
+#include <Servo.h>    //include the servo library
+#include <Wire.h>
+#define servoPin 4
+Servo myservo;        // create servo object to control a servo
+float steeringAngle;  // variable to store the servo position
+
+
+#define enA 5   //EnableA command line - should be a PWM pin
+#define enB 6   //EnableB command line - should be a PWM pin
+
+//name the motor control pins - replace the CHANGEME with your pin number, digital pins do not need the 'D' prefix whereas analogue pins need the 'A' prefix
+#define INa A0  //Channel A direction 
+#define INb A1  //Channel A direction 
+#define INc A2  //Channel B direction 
+#define INd A3  //Channel B direction 
+
+byte speedSetting = 0;  //initial speed = 0
+
+// include encoder library
+#include <Encoder.h>
+
+// change these two numbers (if needed) to enable pins connected to encoder
+
+Encoder myEnc(2, 11);             //enable pins with interrupt capability
+long oldPosition  = -999;
+float count = 0;
+float pi = 3.14159265358;
+float distance;
+
+int angle;
+int u;
+float LMS, RMS;
+float k = 0.4;
+
+void setup() {
+  // put your setup code here, to run once:
+  myservo.attach(servoPin);  //attach our servo object to pin D4
+  //the Servo library takes care of defining the PinMode declaration (libraries/Servo/src/avr/Servo.cpp line 240)
+
+  //configure the motor control pins as outputs
+  pinMode(INa, OUTPUT);
+  pinMode(INb, OUTPUT);
+  pinMode(INc, OUTPUT);
+  pinMode(INd, OUTPUT);
+  pinMode(enA, OUTPUT);
+  pinMode(enB, OUTPUT);   
+
+  //initialise serial communication
+  Serial.begin(9600);
+  Serial.println("Arduino Nano is Running"); //sanity check
+
+  speedSetting = 255;
+  motors(speedSetting, speedSetting); //make a call to the "motors" function and provide it with a value for each of the 2 motors - can be different for each motor - using same value here for expedience
+  Serial.print("Motor Speeds: ");
+  Serial.println(speedSetting); 
+
+  
+  Wire.begin(0x07); //Set Arduino up as an I2C slave at address 0x07
+  Wire.onRequest(requestEvent); //Prepare to send data
+  Wire.onReceive(receiveEvent); //Prepare to recieve data
+}
+
+void requestEvent()
+{
+  unsigned char char_ar[16] = "Hi Raspberry Pi"; //Create String
+  Wire.write(char_ar,16); //Write String to Pi.
+}
+
+void receiveEvent(int numBytes){
+  //Set Up Vars
+  int receive_int=0;
+  int count=0;
+
+  //We'll recieve one byte at a time. Stop when none left
+  while(Wire.available())
+  {
+    char c = Wire.read();    // receive a byte as character
+    //Create Int from the Byte Array
+    receive_int = c << (8 * count) | receive_int;
+    count++;
+  }
+  //Print the Int out.
+  Serial.print("Received Number: "); 
+  Serial.println(receive_int);
+  u = receive_int;
+}
+void loop() {
+moveSteering();
+goForwards();
+}
+
+
+
+void motors(int leftSpeed, int rightSpeed) {
+  //set individual motor speed
+  //direction is set separately
+LMS = 100+(u*k);
+RMS =  100-(u*k);
+  analogWrite(enA, LMS);
+  analogWrite(enB, RMS);
+}
+
+void moveSteering() {
+  //you may need to change the maximum and minimum servo angle to have the largest steering motion
+  int maxAngle = 180;
+  int minAngle = 0;
+  angle = 115 + (u*(-1));
+  myservo.write(angle);
+  
+}
+
+
+//for each of the below function, two of the 'IN' variables must be HIGH, and two LOW in order to move the wheels - use a trial and error approach to determine the correct combination for your EEEBot
+void goForwards() {
+  digitalWrite(INa, HIGH);
+  digitalWrite(INb, LOW);
+  digitalWrite(INc, HIGH);
+  digitalWrite(INd, LOW);
+}
+
+void goBackwards() {
+  digitalWrite(INa, LOW);
+  digitalWrite(INb, HIGH);
+  digitalWrite(INc, LOW);
+  digitalWrite(INd, HIGH);
+}
+
+void goClockwise() {
+  digitalWrite(INa, HIGH);
+  digitalWrite(INb, LOW);
+  digitalWrite(INc, HIGH);
+  digitalWrite(INd, LOW);
+}
+void goAntiClockwise() {
+  digitalWrite(INa, LOW);
+  digitalWrite(INb, HIGH);
+  digitalWrite(INc, LOW);
+  digitalWrite(INd, HIGH);
+}
+
+void stopMotors() {
+  digitalWrite(INa, LOW);
+  digitalWrite(INb, LOW);
+  digitalWrite(INc, LOW);
+  digitalWrite(INd, LOW);
+}
+void Encoder(){
+  long newPosition = myEnc.read();
+  // check if encoder has moved
+  if (newPosition != oldPosition) {
+    oldPosition = newPosition;
+
+    count += 1;
+                  
+    Serial.print("counts: ");
+    Serial.println(count);
+    }
+}
